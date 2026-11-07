@@ -1,0 +1,13 @@
+# Quellmaterial zur Vorlesung (nicht öffentlich, für die App nicht benötigt)
+*.pdf
+CAN/
+Uebung_2/
+auto/
+
+# Systemdateien
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Lokale Einstellungen von Claude Code
+.claude/settings.local.json

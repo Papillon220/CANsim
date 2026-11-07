@@ -1,0 +1,557 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CANsim</title>
+  <link rel="stylesheet" href="css/style.css?v=1.0">
+  <script>/* Hell/Dunkel vor dem ersten Zeichnen setzen (Umschalter in der Kopfzeile, js/main.js) */ try { const t = localStorage.getItem('cansim-theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch (e) { /* ignorieren */ }</script>
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <svg viewBox="0 0 32 32" width="26" height="26" aria-hidden="true">
+        <path d="M2 12 H30" stroke="var(--canh)" stroke-width="3" stroke-linecap="round"/>
+        <path d="M2 20 H30" stroke="var(--canl)" stroke-width="3" stroke-linecap="round"/>
+        <rect x="6" y="3" width="7" height="6" rx="1.5" fill="currentColor"/><path d="M9.5 9 V20" stroke="currentColor" stroke-width="1.6"/>
+        <rect x="19" y="23" width="7" height="6" rx="1.5" fill="currentColor"/><path d="M22.5 23 V12" stroke="currentColor" stroke-width="1.6"/>
+      </svg>
+      <span>CANsim</span>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button class="tab-btn active" role="tab" data-tab="net"><span class="key">1</span>Netzwerk</button>
+      <button class="tab-btn" role="tab" data-tab="msg"><span class="key">2</span>Botschaften</button>
+      <button class="tab-btn" role="tab" data-tab="sim"><span class="key">3</span>Simulation &amp; Trace</button>
+      <button class="tab-btn" role="tab" data-tab="bits"><span class="key">4</span>Bitebene</button>
+      <button class="tab-btn" role="tab" data-tab="err"><span class="key">5</span>Fehler</button>
+      <button class="tab-btn" role="tab" data-tab="crc"><span class="key">6</span>Checksumme &amp; Zähler</button>
+      <button class="tab-btn" role="tab" data-tab="tools"><span class="key">7</span>Werkzeuge &amp; Quiz</button>
+    </nav>
+    <div class="head-right">
+      <div class="sim-chip" id="simChip" title="Status der Bussimulation (läuft in allen Reitern weiter)">
+        <button class="chip-btn" id="chipPlay" type="button" aria-label="Simulation starten/anhalten">▶</button>
+        <span id="chipText">Simulation gestoppt</span>
+      </div>
+      <button class="btn small theme-btn" id="themeBtn" title="Darstellung: automatisch (wie das System), hell oder dunkel">◐ Auto</button>
+      <div class="author">
+        <span class="author-name">Prof. Dr.-Ing. Frank Bender</span>
+        <span class="author-meta">DHBW Stuttgart · Letzte Änderung: <time class="last-modified">–</time> · <span class="version"></span></span>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- ======================= Reiter 1: Netzwerk ======================= -->
+    <section id="tab-net" class="tab active" role="tabpanel">
+      <div class="layout">
+        <aside class="panel">
+          <div class="card">
+            <h3>Szenario</h3>
+            <select id="scnSel" aria-label="Szenario"></select>
+            <p class="hint" id="scnDesc"></p>
+            <div class="btn-row">
+              <button class="btn small" id="scnReset" title="Szenario neu beginnen (Netzwerk und Botschaften zurücksetzen)">Neu beginnen</button>
+              <button class="btn small" id="prjExport" title="Projekt als JSON-Datei speichern">Exportieren</button>
+              <button class="btn small" id="prjImport" title="Projekt aus JSON-Datei laden">Importieren</button>
+              <input type="file" id="prjFile" accept=".json" hidden>
+            </div>
+          </div>
+          <div class="card">
+            <h3>Bauteile</h3>
+            <div class="palette" id="palette"></div>
+            <p class="hint">Knoten auf die Fläche ziehen bzw. anklicken. Verbinden: Pin <b>H</b> oder <b>L</b> eines Knotens anklicken und dann eine Busleitung (CAN_H oder CAN_L) anklicken – oder vom Pin auf die Leitung ziehen. Abschlusswiderstände entlang des Busses verschieben. <kbd>Entf</kbd> löscht das gewählte Element.</p>
+          </div>
+          <div class="card">
+            <h3>Busparameter</h3>
+            <div class="grid2">
+              <label>Bitrate
+                <select id="netBaud">
+                  <option value="125000">125 kbit/s</option><option value="250000">250 kbit/s</option>
+                  <option value="500000">500 kbit/s</option><option value="1000000">1 Mbit/s</option>
+                </select>
+              </label>
+              <label>Buslänge [m]<input id="netLen" type="number" min="1" max="1000" step="1"></label>
+              <label class="full">Abtastpunkt
+                <select id="netSp"><option value="0.75">75 %</option><option value="0.8">80 %</option><option value="0.875">87,5 % (CANopen)</option></select>
+              </label>
+            </div>
+            <p class="hint">Leitung: verdrillte Zweidrahtleitung, Wellenwiderstand Z₀ = 120 Ω, Signallaufzeit ≈ 5 ns/m.</p>
+          </div>
+          <div class="card">
+            <h3>Musterlösung</h3>
+            <p class="hint">Baut ein korrekt verdrahtetes und abgeschlossenes Netzwerk für das Szenario auf.</p>
+            <button class="btn small" id="netSolution">Musterlösung laden</button>
+          </div>
+        </aside>
+
+        <div class="center">
+          <div class="canvas-wrap net-wrap">
+            <svg id="netSvg" viewBox="0 0 1000 480" aria-label="CAN-Netzwerk"></svg>
+            <div class="hud" id="netHud"></div>
+          </div>
+          <div class="legend">
+            <span><i class="sw line" style="--c:var(--canh)"></i>CAN_H</span>
+            <span><i class="sw line" style="--c:var(--canl)"></i>CAN_L</span>
+            <span><i class="sw box res"></i>Abschlusswiderstand</span>
+            <span><i class="sw dot ok"></i>korrekt verbunden</span>
+            <span><i class="sw dot bad"></i>Verdrahtungsfehler</span>
+          </div>
+          <div class="card">
+            <div class="card-head">
+              <h3>Oszilloskop – Differenzsignal am Empfänger</h3>
+              <div class="mini-actions">
+                <label class="inline">Sender <select id="scopeTx"></select></label>
+                <label class="inline">Messpunkt <select id="scopeRx"></select></label>
+                <label class="chk"><input type="checkbox" id="scopeHL" checked> CAN_H / CAN_L</label>
+              </div>
+            </div>
+            <div class="canvas-wrap scope-wrap"><canvas id="scopeCv"></canvas></div>
+            <p class="hint" id="scopeInfo"></p>
+          </div>
+        </div>
+
+        <aside class="panel">
+          <div class="card">
+            <h3>Eigenschaften</h3>
+            <div id="inspector"><p class="hint">Element anklicken, um es zu bearbeiten.</p></div>
+          </div>
+          <div class="card">
+            <h3>Netzwerkprüfung</h3>
+            <ul class="checks" id="netChecks"></ul>
+          </div>
+          <div class="card">
+            <h3>Multimeter (Bus spannungsfrei)</h3>
+            <div class="meter"><span class="meter-lbl">R(CAN_H – CAN_L)</span><span class="meter-val" id="meterVal">–</span></div>
+            <p class="hint" id="meterHint"></p>
+          </div>
+          <details class="card info-card">
+            <summary><h3>Aus der Vorlesung: High-Speed-CAN</h3></summary>
+            <ul class="info">
+              <li>ISO 11898-2: Linienbus, Knoten über kurze Stichleitungen angebunden, bis 1 Mbit/s (CAN FD bis 5 Mbit/s).</li>
+              <li>Beide Leitungsenden mit <b>120 Ω</b> (= Wellenwiderstand) terminiert → keine Reflexionen; zwischen CAN_H und CAN_L misst man <b>60 Ω</b>.</li>
+              <li>Dominant (logisch 0): CAN_H ≈ 3,5 V, CAN_L ≈ 1,5 V. Rezessiv (1): beide ≈ 2,5 V, Differenz 0 V.</li>
+              <li>Max. 40 m bei 1 Mbit/s – die Arbitrierung verlangt, dass ein Bit innerhalb einer Bitzeit hin- und zurückläuft.</li>
+              <li>Verdrillte Adern (≈ 30 Schläge/m): Magnetfelder heben sich auf, Störungen wirken auf beide Adern gleich (Gleichtakt) und fallen in der Differenz heraus.</li>
+              <li>Typische Fehlerquellen: Leiterbruch, fehlender/falscher Abschlusswiderstand, defekte Knoten, unterschiedliche Baudraten.</li>
+              <li>Sub-D9 (CiA 303-1): Pin 2 CAN_L, Pin 7 CAN_H, Pin 3 GND, Pin 9 V+.</li>
+            </ul>
+          </details>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ======================= Reiter 2: Botschaften ======================= -->
+    <section id="tab-msg" class="tab" role="tabpanel">
+      <div class="layout">
+        <aside class="panel">
+          <div class="card">
+            <h3>Kommunikationsmatrix</h3>
+            <div id="msgList" class="msg-list"></div>
+            <div class="add-row">
+              <select id="msgAddNode" aria-label="Sender"></select>
+              <button class="btn small primary" id="msgAdd">＋ Botschaft</button>
+            </div>
+            <p class="hint">Die Botschaften sind nach Priorität sortiert (kleinste ID = höchste Priorität).</p>
+          </div>
+          <div class="card" id="taskCard">
+            <h3>Aufgabe</h3>
+            <div id="msgTask"></div>
+            <div class="btn-row">
+              <button class="btn small primary" id="msgCheck">Lösung prüfen</button>
+              <button class="btn small" id="msgSolution">Musterlösung</button>
+            </div>
+            <ul class="checks" id="msgTaskRes"></ul>
+          </div>
+        </aside>
+
+        <div class="center">
+          <div class="card" id="msgEditor"></div>
+          <div class="card">
+            <div class="card-head"><h3>Layout des Datenfelds</h3><span class="hint" id="layoutHint">Zelle anklicken: Startbit des gewählten Signals setzen</span></div>
+            <div id="msgLayout" class="layout-grid"></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h3>Signale</h3><button class="btn small" id="sigAdd">＋ Signal</button></div>
+            <div class="table-wrap"><table id="sigTable"></table></div>
+            <ul class="checks" id="msgIssues"></ul>
+          </div>
+        </div>
+
+        <aside class="panel">
+          <div class="card">
+            <h3>Rechner: Signalauslegung</h3>
+            <div class="grid2">
+              <label>Minimum<input id="calcMin" type="number" value="-180" step="any"></label>
+              <label>Maximum<input id="calcMax" type="number" value="180" step="any"></label>
+              <label>Auflösung (Faktor)<input id="calcRes" type="number" value="0.01" step="any"></label>
+              <label>Rohwert vorzeichen&shy;behaftet<select id="calcSigned"><option value="0">nein (unsigned)</option><option value="1">ja (signed)</option></select></label>
+            </div>
+            <div id="calcOut" class="calc-out"></div>
+          </div>
+          <div class="card">
+            <h3>CAN-Datenbank (DBC) exportieren</h3>
+            <p class="hint">Erzeugt aus der Kommunikationsmatrix eine DBC-Datei (wie mit CANdb++). Sie kann im Reiter <i>Simulation &amp; Trace</i> geladen werden.</p>
+            <div class="btn-row">
+              <button class="btn small" id="dbcShow">Vorschau</button>
+              <button class="btn small primary" id="dbcSave">DBC speichern</button>
+            </div>
+            <pre class="code" id="dbcPreview" hidden></pre>
+          </div>
+          <details class="card info-card" open>
+            <summary><h3>Aus der Vorlesung: Signale</h3></summary>
+            <ul class="info">
+              <li>Zur Umrechnung braucht man <b>Startbit, Länge, Offset und Faktor</b>:<br><span class="formula">phys = Offset + Faktor · Rohwert</span></li>
+              <li>Beispiel: 0x7A3F = 31295, Offset −163,84, Faktor 0,005 → y = −163,84 + 0,005 · 31295 = <b>−7,365</b>.</li>
+              <li>Benötigte Bits: n = ⌈log₂((max − min)/Auflösung + 1)⌉.</li>
+              <li><b>Intel</b> (Little Endian): Startbit = LSB. <b>Motorola</b> (Big Endian): Startbit = MSB.</li>
+              <li>Niedrige ID = hohe Priorität (dominante 0 gewinnt die Arbitrierung).</li>
+              <li>Absicherung im Datenfeld: <b>Botschaftszähler</b> (z. B. 4 bit, 0…15) und <b>Checksumme</b> (z. B. CRC-8 nach SAE J1850).</li>
+            </ul>
+          </details>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ======================= Reiter 3: Simulation & Trace ======================= -->
+    <section id="tab-sim" class="tab" role="tabpanel">
+      <div class="layout">
+        <aside class="panel">
+          <div class="card">
+            <h3>Simulation</h3>
+            <div class="btn-row">
+              <button class="btn go" id="simStart">▶ Start</button>
+              <button class="btn" id="simPause">❚❚ Pause</button>
+              <button class="btn" id="simReset" title="Zeit, Trace und Fehlerzähler zurücksetzen">Zurücksetzen</button>
+            </div>
+            <label>Zeitraffer / Zeitlupe
+              <select id="simSpeed">
+                <option value="2">2×</option><option value="1" selected>1× (Echtzeit)</option><option value="0.25">0,25×</option><option value="0.05">0,05×</option><option value="0.01">0,01× (Zeitlupe)</option>
+              </select>
+            </label>
+            <div class="stats">
+              <div class="stat"><span class="k">Simulationszeit</span><span class="v" id="simTime">0,000 s</span></div>
+              <div class="stat"><span class="k">Buslast</span><span class="v" id="simLoad">–</span></div>
+              <div class="stat"><span class="k">Rahmen / Error Frames</span><span class="v" id="simCount">–</span></div>
+            </div>
+            <p class="hint" id="simNetHint"></p>
+          </div>
+          <div class="card" id="joyCard">
+            <h3>Joystick</h3>
+            <div class="joy-wrap">
+              <div class="joy-pad" id="joyPad"><div class="joy-knob" id="joyKnob"></div></div>
+              <div class="joy-btns">
+                <button class="btn small" data-btn="0">Taster 1</button><button class="btn small" data-btn="1">Taster 2</button>
+                <button class="btn small" data-btn="2">Taster 3</button><button class="btn small" data-btn="3">Taster 4</button>
+              </div>
+            </div>
+            <p class="hint">Ziehen mit der Maus oder Pfeiltasten (↑/↓ = Y, ←/→ = X), Taster 1–4 über Tasten <kbd>1</kbd>–<kbd>4</kbd> (gedrückt halten). Doppelklick auf das Feld: Taster einrasten.</p>
+            <div class="stats compact"><div class="stat"><span class="k">X / Y</span><span class="v" id="joyVal">0 ‰ / 0 ‰</span></div></div>
+          </div>
+          <div class="card" id="boomCard">
+            <h3>Hubwerk</h3>
+            <svg id="boomSvg" viewBox="0 0 300 190" aria-label="Hubwerk"></svg>
+            <label class="chk"><input type="checkbox" id="autoChk"> Teilautomation in der Steuerung (Taster 1/2 → Endlage)</label>
+            <div class="stats compact">
+              <div class="stat"><span class="k">Steuerung</span><span class="v" id="ecuMode">–</span></div>
+              <div class="stat"><span class="k">Winkel / Rate</span><span class="v" id="boomVal">–</span></div>
+            </div>
+          </div>
+          <div class="card" id="imuCard">
+            <h3>Inertialsensor</h3>
+            <label class="chk"><input type="checkbox" id="imuMotion"> Maschine bewegen (Schwenken, Wanken)</label>
+            <p class="hint">In Ruhe zeigen die Drehraten nur ihre Offsets (vgl. Übung 2.1 f). Integriert man die Gierrate über 60 s, ergibt sich ein Winkelfehler von Offset × 60 s.</p>
+          </div>
+          <div class="card">
+            <h3>Knoten am Bus</h3>
+            <div id="simNodes" class="node-states"></div>
+          </div>
+        </aside>
+
+        <div class="center">
+          <div class="card">
+            <div class="card-head">
+              <h3>Trace (CAN-Interface)</h3>
+              <div class="mini-actions">
+                <div class="seg small" id="traceMode"><button data-mode="fixed" class="active">Feste Position</button><button data-mode="chrono">Chronologisch</button></div>
+                <label class="chk" title="Mit geladener DBC: Signale unter jeder Botschaft anzeigen"><input type="checkbox" id="traceSigs" checked> Signale</label>
+                <input id="traceFilter" class="filter" placeholder="Filter (ID oder Name)" aria-label="Filter">
+                <button class="btn small" id="traceClear">Leeren</button>
+                <button class="btn small" id="traceCsv" title="Trace als CSV speichern">CSV</button>
+              </div>
+            </div>
+            <div class="table-wrap trace-wrap"><table id="traceTable"></table></div>
+            <p class="hint" id="traceHint"></p>
+          </div>
+          <div class="card">
+            <div class="card-head">
+              <h3>Grafik</h3>
+              <div class="mini-actions">
+                <label class="inline">Zeitfenster <select id="plotWin"><option value="5">5 s</option><option value="10" selected>10 s</option><option value="30">30 s</option><option value="60">60 s</option></select></label>
+              </div>
+            </div>
+            <div class="canvas-wrap plot-wrap"><canvas id="plotCv"></canvas></div>
+          </div>
+        </div>
+
+        <aside class="panel">
+          <div class="card">
+            <h3>CAN-Datenbank (DBC)</h3>
+            <div class="add-row">
+              <select id="dbcSel" aria-label="Datenbank"></select>
+              <button class="btn small primary" id="dbcLoad">Laden</button>
+            </div>
+            <div class="btn-row">
+              <button class="btn small" id="dbcFileBtn">Datei öffnen …</button>
+              <button class="btn small" id="dbcUnload">Entfernen</button>
+              <button class="btn small" id="dbcView">Anzeigen</button>
+              <input type="file" id="dbcFile" accept=".dbc" hidden>
+            </div>
+            <p class="hint" id="dbcStatus">Keine Datenbank geladen – der Trace zeigt nur ID und Rohdaten.</p>
+            <pre class="code" id="dbcText" hidden></pre>
+          </div>
+          <div class="card">
+            <div class="card-head"><h3>Signale</h3><span class="hint">Grafik: Fenster 1–3</span></div>
+            <div id="sigList" class="sig-list"><p class="hint">Nach dem Laden einer DBC erscheinen hier alle Signale.</p></div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ======================= Reiter 4: Bitebene ======================= -->
+    <section id="tab-bits" class="tab" role="tabpanel">
+      <div class="layout">
+        <aside class="panel">
+          <div class="card">
+            <h3>Rahmen</h3>
+            <label>Quelle
+              <select id="bitSrc"></select>
+            </label>
+            <div class="grid2">
+              <label>Identifier (hex)<input id="bitId" type="text" value="124" class="mono"></label>
+              <label>Format<select id="bitExt"><option value="0">Standard (11 bit)</option><option value="1">Extended (29 bit)</option></select></label>
+              <label>Rahmentyp<select id="bitRtr"><option value="0">Data Frame</option><option value="1">Remote Frame</option></select></label>
+              <label>DLC<input id="bitDlc" type="number" min="0" max="8" value="5"></label>
+              <label class="full">Daten (hex)<input id="bitData" type="text" value="4C 04 E8 03 32" class="mono"></label>
+            </div>
+            <button class="btn small" id="bitRestore">Bitkipper zurücksetzen</button>
+          </div>
+          <div class="card">
+            <h3>Kennzahlen</h3>
+            <div class="stats" id="bitStats"></div>
+          </div>
+          <details class="card info-card" open>
+            <summary><h3>Aus der Vorlesung: Telegramm</h3></summary>
+            <ul class="info">
+              <li><b>SOF</b> dominant, <b>ID</b> 11 bit (Standard) bzw. 11 + 18 bit (Extended), <b>RTR</b> 0 = Daten, 1 = Anforderung.</li>
+              <li><b>IDE</b> 0 bei 11-bit-, 1 bei 29-bit-Identifier; Extended-Rahmen haben zusätzlich <b>SRR</b> = 1.</li>
+              <li><b>DLC</b> 0–8 Datenbytes, <b>CRC</b> 15 bit, Delimiter rezessiv, <b>ACK</b>-Slot vom Empfänger dominant überschrieben, <b>EOF</b> 7 × rezessiv, <b>IFS</b> 3 bit.</li>
+              <li>Standardrahmen mit 8 Byte: 108 bit (+ bis ca. 20 % Stuff-Bits), Extended: 127 bit.</li>
+              <li><b>Bitstuffing</b>: Nach 5 gleichen Bits folgt ein invertiertes Stuff-Bit (SOF bis CRC). 6 gleiche Bits = <b>Stuff-Fehler</b>.</li>
+            </ul>
+          </details>
+        </aside>
+
+        <div class="center">
+          <div class="card">
+            <div class="card-head"><h3>Bitstrom auf dem Bus</h3><span class="hint">Bit anklicken → Bit kippt (Störung auf der Leitung)</span></div>
+            <div id="bitView" class="bit-view"></div>
+            <div class="legend inline" id="bitLegend"></div>
+            <div class="canvas-wrap wave-wrap"><canvas id="bitWave"></canvas></div>
+          </div>
+          <div class="card">
+            <h3>Fehlererkennung beim Empfänger</h3>
+            <div id="bitAnalysis"></div>
+          </div>
+          <div class="card">
+            <div class="card-head">
+              <h3>Zerstörungsfreie Arbitrierung (Wired-AND)</h3>
+              <div class="mini-actions">
+                <button class="btn small" id="arbLive" title="Letzte echte Arbitrierung aus der Simulation übernehmen">Aus Simulation</button>
+              </div>
+            </div>
+            <div class="arb-inputs" id="arbInputs"></div>
+            <div id="arbView" class="arb-view"></div>
+            <p class="hint" id="arbInfo"></p>
+          </div>
+        </div>
+
+        <aside class="panel">
+          <div class="card">
+            <div class="card-head"><h3>CRC-15 des Rahmens</h3><label class="chk"><input type="checkbox" id="crc15Steps"> Schritte</label></div>
+            <p class="formula">g(x) = x¹⁵ + x¹⁴ + x¹⁰ + x⁸ + x⁷ + x⁴ + x³ + 1</p>
+            <div id="crc15Out"></div>
+            <div class="table-wrap" id="crc15StepsWrap" hidden><table id="crc15Table"></table></div>
+          </div>
+          <div class="card">
+            <h3>Bitstuffing üben</h3>
+            <label>Bitfolge (vor dem Stuffing)<input id="stuffIn" type="text" class="mono" value="00000111110000011111"></label>
+            <div id="stuffOut" class="stuff-out"></div>
+            <label>Empfangene Bitfolge prüfen (Destuffing)<input id="destuffIn" type="text" class="mono" value="0000010000011111000001"></label>
+            <div id="destuffOut" class="stuff-out"></div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ======================= Reiter 5: Fehler ======================= -->
+    <section id="tab-err" class="tab" role="tabpanel">
+      <div class="layout">
+        <aside class="panel">
+          <div class="card">
+            <h3>Einzelfehler injizieren</h3>
+            <label>Fehlertyp
+              <select id="injType">
+                <option value="bit">Bit-Fehler (Sender liest anderen Pegel)</option>
+                <option value="stuff">Stuff-Fehler (6 gleiche Bits)</option>
+                <option value="crc">CRC-Fehler</option>
+                <option value="form">Form-Fehler (Delimiter dominant)</option>
+                <option value="ack">ACK-Fehler (keine Quittung)</option>
+              </select>
+            </label>
+            <label>Betroffene Botschaft<select id="injMsg"></select></label>
+            <div class="btn-row">
+              <button class="btn small primary" id="injOnce">Einmal injizieren</button>
+              <button class="btn small" id="injBurst" title="10 Fehler hintereinander">10 ×</button>
+            </div>
+            <p class="hint">Die Simulation muss laufen (Reiter 3 oder ▶ in der Kopfzeile).</p>
+          </div>
+          <div class="card">
+            <h3>Dauerhafte Fehler</h3>
+            <label>Defekter Knoten (Transceiver)<select id="defectSel"></select></label>
+            <label>EMV-Störung (Differenzspannung) <span id="noiseVal">0 V</span>
+              <input type="range" id="noise" min="0" max="1.5" step="0.05" value="0">
+            </label>
+            <p class="hint">Weitere Fehlerquellen ergeben sich direkt aus dem Netzwerk in Schritt 1: fehlender Abschluss, vertauschte Adern, falsche Baudrate, zu lange Leitung, nur ein aktiver Knoten (kein ACK).</p>
+          </div>
+          <div class="card">
+            <h3>Fehlertypen – wer erkennt?</h3>
+            <div class="err-types" id="errTypes"></div>
+          </div>
+        </aside>
+
+        <div class="center">
+          <div class="card">
+            <div class="card-head">
+              <h3>Ablauf eines Error Frames</h3>
+              <div class="mini-actions">
+                <div class="seg small" id="efExample">
+                  <button data-ex="1" class="active">Bsp. 1: 6 bit</button><button data-ex="2">Bsp. 2: 12 bit</button><button data-ex="3">Bsp. 3: 9 bit</button><button data-ex="live">Letzter aus Simulation</button>
+                </div>
+              </div>
+            </div>
+            <div class="canvas-wrap ef-wrap"><canvas id="efCv"></canvas></div>
+            <p class="ef-text" id="efText"></p>
+          </div>
+          <div class="card">
+            <div class="card-head"><h3>Fehlerprotokoll</h3><button class="btn small" id="errClear">Leeren</button></div>
+            <div class="table-wrap err-wrap"><table id="errTable"></table></div>
+          </div>
+        </div>
+
+        <aside class="panel">
+          <div class="card">
+            <h3>Fehlerzähler &amp; Zustände</h3>
+            <div class="table-wrap"><table id="errNodes"></table></div>
+            <label class="inline">Zustandsautomat für <select id="fsmNode"></select></label>
+            <svg id="fsmSvg" viewBox="0 0 340 270" aria-label="Zustandsautomat"></svg>
+          </div>
+          <div class="card">
+            <h3>Verlauf TEC / REC</h3>
+            <div class="canvas-wrap tec-wrap"><canvas id="tecCv"></canvas></div>
+          </div>
+          <details class="card info-card">
+            <summary><h3>Aus der Vorlesung: Fehlerbehandlung</h3></summary>
+            <ul class="info">
+              <li>Sender erkennt <b>Bit-Fehler</b> und sendet ein <b>Primary Active Error Flag</b> (6 dominante Bits).</li>
+              <li>Die 6 dominanten Bits lösen bei den anderen einen <b>Stuff-Fehler</b> aus → <b>Secondary Error Flag</b> (0–6 Bit).</li>
+              <li>Error Frame = Error Flags + 8 rezessive Delimiter-Bits. Der Sender wiederholt danach automatisch.</li>
+              <li>TEC + 8 beim Sender, REC + 1 bei erkennenden Empfängern (+ 8 beim verursachenden Empfänger); erfolgreich: −1.</li>
+              <li>TEC oder REC &gt; 127 → <b>Error Passive</b> (nur noch passive, rezessive Flags). TEC &gt; 255 → <b>Bus Off</b>.</li>
+              <li>Bus Off wird nur durch Host-Eingriff und 128 × 11 rezessive Bits verlassen – ein defekter Knoten blockiert so nicht den Bus.</li>
+            </ul>
+          </details>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ======================= Reiter 6: Checksumme & Zähler ======================= -->
+    <section id="tab-crc" class="tab" role="tabpanel">
+      <div class="layout">
+        <aside class="panel">
+          <div class="card">
+            <h3>CRC-8-Rechner</h3>
+            <label>Beispiel<select id="crcSample"></select></label>
+            <label>Datenbytes (hex, ohne CRC)<input id="crcData" type="text" class="mono" value="18 80 00 57 D0 7D 05"></label>
+            <label>Verfahren<select id="crcPreset"></select></label>
+            <div class="grid3">
+              <label>Polynom<input id="crcPoly" type="text" class="mono" value="1D"></label>
+              <label>Startwert<input id="crcInit" type="text" class="mono" value="FF"></label>
+              <label>XOR am Ende<input id="crcXor" type="text" class="mono" value="FF"></label>
+            </div>
+            <label>Empfangene CRC (hex, optional)<input id="crcExp" type="text" class="mono" value="45"></label>
+            <div id="crcResult" class="crc-result"></div>
+          </div>
+          <div class="card">
+            <h3>Ende-zu-Ende-Fehler simulieren</h3>
+            <p class="hint">Fehler in der Anwendung des Senders bzw. auf dem Übertragungsweg – die CAN-Hardware (CRC-15) erkennt sie nicht.</p>
+            <div id="e2eFaults"></div>
+          </div>
+        </aside>
+
+        <div class="center">
+          <div class="card">
+            <div class="card-head"><h3>Schrittweise Berechnung (wie <span class="mono">Test_CRC8_J1850.m</span>)</h3><label class="chk"><input type="checkbox" id="crcBits" checked> Einzelbits</label></div>
+            <div class="table-wrap crc-steps"><table id="crcSteps"></table></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h3>Live-Prüfung empfangener Botschaften</h3><span class="hint" id="e2eHint"></span></div>
+            <div class="table-wrap e2e-wrap"><table id="e2eTable"></table></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h3>Botschaftszähler</h3><label class="inline">Botschaft <select id="cntMsg"></select></label></div>
+            <div class="canvas-wrap cnt-wrap"><canvas id="cntCv"></canvas></div>
+          </div>
+        </div>
+
+        <aside class="panel">
+          <div class="card">
+            <h3>Fehleranalyse</h3>
+            <div id="e2eAnalysis"><p class="hint">In der Live-Prüfung eine fehlerhafte Botschaft anklicken – oder im Rechner eine abweichende CRC eingeben.</p></div>
+          </div>
+          <details class="card info-card" open>
+            <summary><h3>Aus der Vorlesung &amp; Übung</h3></summary>
+            <ul class="info">
+              <li>CRC-8 nach <b>SAE J1850</b>: g(x) = x⁸ + x⁴ + x³ + x² + 1 (0x1D), Startwert 0xFF, abschließend XOR 0xFF.</li>
+              <li>Der <b>CAN-Controller</b> sichert jeden Rahmen mit CRC-15 – aber nur auf dem Weg über <i>einen</i> Bus.</li>
+              <li>Zähler und CRC im Datenfeld sichern <b>Ende-zu-Ende</b> von der Sender-Software bis zur Empfänger-Software: Gateways, Puffer, hängende Sender (Zähler steht), verlorene Botschaften (Zähler springt).</li>
+              <li>4-bit-Zähler zählt 0…15 und beginnt dann wieder bei 0.</li>
+              <li>Die CRC wird über alle übrigen Datenbytes berechnet (hier: in Byte-Reihenfolge, CRC-Byte ausgenommen).</li>
+            </ul>
+          </details>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ======================= Reiter 7: Werkzeuge & Quiz ======================= -->
+    <section id="tab-tools" class="tab" role="tabpanel">
+      <div class="tools-grid" id="toolsGrid"></div>
+    </section>
+  </main>
+  <div id="toast" class="toast"></div>
+
+  <!-- Simulator (?v= bei jeder neuen Version mit CS.VERSION in core.js erhöhen) -->
+  <script src="js/core.js?v=1.0"></script>
+  <script src="js/dbc.js?v=1.0"></script>
+  <script src="js/phys.js?v=1.0"></script>
+  <script src="js/sim.js?v=1.0"></script>
+  <script src="js/plot.js?v=1.0"></script>
+  <script src="js/tab-net.js?v=1.0"></script>
+  <script src="js/tab-msg.js?v=1.0"></script>
+  <script src="js/tab-sim.js?v=1.0"></script>
+  <script src="js/tab-bits.js?v=1.0"></script>
+  <script src="js/tab-err.js?v=1.0"></script>
+  <script src="js/tab-crc.js?v=1.0"></script>
+  <script src="js/tab-tools.js?v=1.0"></script>
+  <script src="js/main.js?v=1.0"></script>
+</body>
+</html>
