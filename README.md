@@ -20,6 +20,8 @@ Szenarien: *Hubwerk – Teilautomation (Übung 2.2)*, *Inertialsensor MM7.10 (Ü
 
 Der Arbeitsstand wird im Browser gespeichert; *Exportieren/Importieren* sichert ihn als JSON. Oben rechts schaltet *◐ Auto / ☀ Hell / ☾ Dunkel* die Darstellung um.
 
+**Online starten:** https://papillon220.github.io/CANsim/
+
 ## Lokal starten
 
 `index.html` im Browser öffnen (Chrome, Edge, Firefox). Keine Installation, keine Internetverbindung, keine externen Bibliotheken.
